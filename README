@@ -1,0 +1,70 @@
+vis.py
+A python graph algorithm visualization library
+
+vis requires PyGraphviz, which can be found here: http://pygraphviz.github.io
+
+For basic example usage, see sampleDriver.py
+
+vis currently does not support modifying the shape of the initial graph: no adding or removing edges or nodes after creating the graph
+
+vis provides the following interfaces:
+
+Graph class - graph objects
+	initialization parameter is an adjacency matrix such as:
+		#	  0  1  2  3
+		E = [[0, 1, 1, 0], #0
+			 [0, 0, 0, 1], #1
+			 [0, 0, 0, 1], #2
+			 [0, 0, 0, 0]] #3
+	where E[i][j] is the weight of the edge from i to j, and a weight of 0 means no edge
+
+	Nodes in a Graph G are numbered 0 through n-1, where n is the number of nodes
+
+	For a Graph object G:
+		G.getNode(i) returns the ith node object
+		G.getEdge(i, j) returns the Edge object for the edge between the ith node and the jth
+			returns None if there is no such object (i.e. there is no edge between the ith and jth nodes)
+		G.getNodes(color=None, condition=lambda x: True) is a generator that yeilds
+		  each node u for which u.color == color (default any color),
+		  and condition(u) == True
+		G.getEdges(color=None, weight=None, condition=lambda x: True, sort=None)
+		  is a generator that yeilds each edge e for which
+			e.color == color (default any color),
+			e.weight == weight if weight is numeric
+			  or weight(e.weight) == True otherwise,
+			and condition(e) == True
+		  returns in sort order (default is arbitrary order)
+
+		G.show(delay=1) draws the current graph into a .png file
+			saves in the ./graphs directory
+			if self.autovis is set to True, this also opens the image file
+			  and waits 'delay' seconds
+
+Node class - node objects
+	creation is handled upon graph initialization
+
+	For a Node object u:
+		u.edgesFrom is a list of Edge objects that originate at u
+		u.edgesTo is a list of Edge objects that end at u
+			In an undirected graph, u.edgesFrom == u.edgesTo
+		u.neighbors is a list of Node objects reachable from u with one hop
+		u.backNeighbors is a list of Node objects that can reach u with one hop
+			u.backNeighbors is empty in an undirected graph
+
+		u.setColor(newColor) sets u's color in the graph to newColor
+		u.color() and u.getColor() both return the color of Node u
+
+Edge class - edge objects
+	creation is handled upon graph initialization
+
+	For an Edge object e:
+		e.head is the Node object at the head of e
+		e.tail is the Node object at the tail of e
+			the choice of e.head vs e.tail is arbitrary in an undirected graph
+		e.follow(i) returns the Node adjacent to e that isn't Node i or None if i isn't adjacent to e
+
+		e.setColor(newColor) sets e's color in the graph to newColor
+		e.color() and e.getColor() both return the color of Edge e
+
+		e.setWeight(newWeight) sets e's color in the graph to newWeight
+		u.weight() and u.getWeight() both return the color of Edge e

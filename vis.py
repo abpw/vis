@@ -28,6 +28,8 @@ class Graph(object):
 
 		# Create the AGraph
 		self.G = pgv.AGraph(strict=True, directed=self.directed)
+		self.G.node_attr['shape'] = 'ellipse'
+		self.G.node_attr['style'] = 'filled'
 
 		# Edges indexed by head then tail
 		self.E = {}
@@ -42,7 +44,7 @@ class Graph(object):
 			self.E[i][j] = Edge(i, j, self, weight=weight)
 
 		def addNode(i):
-			self.G.add_node(i, shape='ellipse', style='filled')
+			self.G.add_node(i)
 			self.V.append(Node(i, self))
 
 		# Add edges
@@ -62,7 +64,10 @@ class Graph(object):
 		return self.V[i]
 
 	def getEdge(self, i, j):
-		return self.E[i][j]
+		try:
+			return self.E[i][j]
+		except KeyError:
+			return None
 
 	# generator that yeilds each node u for which u.color == color (default any color),
 	# and condition(u) == True
@@ -89,7 +94,7 @@ class Graph(object):
 		filename = 'graphs/image' + '{0:0>3d}'.format(self.imgCount) + '.png'
 		if not os.path.exists('graphs'):
 			os.makedirs('graphs')
-		self.G.draw(filename, prog='neato')
+		self.G.draw(filename, prog='dot')
 		self.imgCount += 1
 		if self.imgCount == 101:
 			print 'Warning: over 100 images have been saved to disk. Consider killing the process.'
@@ -97,34 +102,16 @@ class Graph(object):
 			Image.open(filename).show()
 			time.sleep(delay)
 
-# used for the descriptor protocol to add the '.color' shorthand to nodes and edges
-class Color(object):
-	def __init__(self, element, color='white'):
-		self.element = element
-		self.element.pvgElement().attr['color'] = color
-
-	def __set__(self, color):
-		self.element.pvgElement().attr['color'] = color
-
-	def __get__(self):
-		return self.element.pvgElement().attr['color']
-
-# used for the descriptor protocol to add the '.weight' shorthand to edges
-class Weight(object):
-	def __init__(self, edge, weight=1):
-		self.edge = edge
-		self.edge.pvgElement().attr['weight'] = weight
-
-	def __set__(self, weight):
-		self.edge.pvgElement().attr['weight'] = weight
-
-	def __get__(self):
-		return self.edge.pvgElement().attr['weight']
-
 # Superclass for Node and Edge. Not too useful at the moment, but extensible
 class Element(object):
-	def __init__(self, color='white'):
-		self.color = Color(self, color=color)
+	def setColor(self, color):
+		self.pvgElement().attr['color'] = color
+
+	def color(self):
+		return self.getColor()
+
+	def getColor(self):
+		return self.pvgElement().attr['color']
 
 # Node object
 class Node(Element):
@@ -143,7 +130,7 @@ class Node(Element):
 		# Empty in an undirected graph
 		self.backNeighbors = []
 
-		super(Node, self).__init__()
+		self.setColor('gray')
 
 	# return the pvg version of this node
 	def pvgElement(self):
@@ -182,8 +169,17 @@ class Edge(Element):
 			self.tail.edgesFrom.append(self)
 			self.tail.neighbors.append(self.head)
 
-		self.weight = Weight(self, weight=weight)
-		super(Edge, self).__init__(color='black')
+		self.setColor('black')
+		self.setWeight(weight)
+
+	def setWeight(self, weight):
+		self.pvgElement().attr['weight'] = weight
+
+	def weight(self):
+		return self.getWeight()
+
+	def getWeight(self):
+		return self.pvgElement().attr['weight']
 
 	# return the pvg version of this edge
 	def pvgElement(self):
