@@ -1,10 +1,18 @@
 import time
 import pygraphviz as pgv
+from PIL import Image
+import os
 
 # wrapper object for pgv.AGraph
 class Graph(object):
 	# E is a list of lists representing the adjacency matrix of the graph
 	def __init__(self, E):
+		# if set to True, images will automatically be displayed
+		self.autovis = False
+
+		# counts the number of images created
+		self.imgCount = 0
+
 		assert len(E) and len(E[0]) == len(E), "Adjacency matrix must be square and non-empty"
 
 		# If the adjacency matrix is symmetric, the graph is undirected
@@ -19,39 +27,24 @@ class Graph(object):
 					break
 
 		# Create the AGraph
-		self.G = psv.AGraph(strict=True, directed=self.directed)
+		self.G = pgv.AGraph(strict=True, directed=self.directed)
 
-		def addEdge(i, j):
-			# New method for edges: takes one end and returns the other
-			# if a non-adjacent node is given, returns None
-			def follow(self, i):
-				if i == self.head:
-					return self.tail
-				if i == self.tail:
-					return self.head
-				return None
+		# Edges indexed by head then tail
+		self.E = {}
+		for i in xrange(len(E)):
+			self.E[i] = {}
 
+		# nodes in numerical order
+		self.V = []
+
+		def addEdge(i, j, weight):
 			self.G.add_edge(i, j)
-			e = self.getEdge(i, j)
-			e.weight = Weight(e)
-			e.color = Color(e, color='black')
-			e.head = self.getNode(i)
-			e.tail = self.getNode(i)
-			e.follow = follow.__get__(e)
-			self.E.append(e)
+			self.E[i][j] = Edge(i, j, self, weight=weight)
 
 		def addNode(i):
-			# New method for 
-			self.G.add_node(i)
-			u = self.getNode(i)
-			u.color = Color(u)
-			u.edgesFrom = []
-			u.edgesTo = []
-			u.children = []
-			u.parents = []
+			self.G.add_node(i, shape='ellipse', style='filled')
+			self.V.append(Node(i, self))
 
-
-		self.E = []
 		# Add edges
 		for i in xrange(len(E)):
 			addNode(i)
@@ -59,86 +52,148 @@ class Graph(object):
 				if E[i][j]:
 					# In the adjacency matrix of a directed graph, the first coordinate
 					# is the source and the second is the destination
-					addEdge(i, j)
+					addEdge(i, j, weight=E[j][i])
 				if self.directed and E[j][i]:
-					addEdge(j, i)
-
-			top = len(E) if self.directed else i
-			for j in xrange(top):
-				if E[i][j]:
-					v.addEdge(i+1, j+1, weight=E[i][j])
+					addEdge(j, i, weight=E[i][j])
 
 		self.size = len(E)
 
 	def getNode(self, i):
-		return self.G.get_node(i)
+		return self.V[i]
 
 	def getEdge(self, i, j):
-		return self.G.get_edge(i, j)
+		return self.E[i][j]
 
 	# generator that yeilds each node u for which u.color == color (default any color),
 	# and condition(u) == True
 	def getNodes(self, color=None, condition=lambda x: True):
-		for i in xrange(self.size):
-			u = self.getNode(i)
+		for u in self.V:
 			if (not color or u.color == color) and condition(u):
 				yield u
 
 	# generator that yeilds each edge e for which e.color == color (default any color),
 	# e.weight == weight if weight is numeric or weight(e.weight) == True otherwise,
 	# and condition(e) == True
-	def getEdges(self, color=None, weight, condition=lambda x: True):
-		for e in self.E:
+	# returns in sort order (default is arbitrary order)
+	def getEdges(self, color=None, weight=None, condition=lambda x: True, sort=None):
+		for e in sorted([edge for dest in self.E.values() for edge in dest.values()], cmp=sort):
 			if (not color or u.color == color) and condition(u):
 				if isinstance(weight, (int, float, long)) and e.weight == weight:
 					yield e
 				elif hasattr(weight, '__call__') and weight(e.weight):
 					yield e
 
+	# write the current graph to a file
+	# if self.autovis is set to True, display the image and sleep for 'delay' seconds
 	def show(self, delay=1):
-		pass
-		time.sleep(delay)
+		filename = 'graphs/image' + '{0:0>3d}'.format(self.imgCount) + '.png'
+		if not os.path.exists('graphs'):
+			os.makedirs('graphs')
+		self.G.draw(filename, prog='neato')
+		self.imgCount += 1
+		if self.imgCount == 101:
+			print 'Warning: over 100 images have been saved to disk. Consider killing the process.'
+		if self.autovis:
+			Image.open(filename).show()
+			time.sleep(delay)
 
 # used for the descriptor protocol to add the '.color' shorthand to nodes and edges
 class Color(object):
 	def __init__(self, element, color='white'):
 		self.element = element
-		self.element.attr['color'] = color
+		self.element.pvgElement().attr['color'] = color
 
 	def __set__(self, color):
-		self.element.attr['color'] = color
+		self.element.pvgElement().attr['color'] = color
 
 	def __get__(self):
-		return self.element.attr['color']
+		return self.element.pvgElement().attr['color']
 
 # used for the descriptor protocol to add the '.weight' shorthand to edges
 class Weight(object):
-	def __init__(self, edge):
+	def __init__(self, edge, weight=1):
 		self.edge = edge
+		self.edge.pvgElement().attr['weight'] = weight
 
-	def __set__(self, color):
-		self.edge.attr['color'] = color
+	def __set__(self, weight):
+		self.edge.pvgElement().attr['weight'] = weight
 
 	def __get__(self):
-		return self.edge.attr['color']
+		return self.edge.pvgElement().attr['weight']
 
-'''
-class Vertex(object):
-	def __init__(self, label, graph, color='white'):
+# Superclass for Node and Edge. Not too useful at the moment, but extensible
+class Element(object):
+	def __init__(self, color='white'):
+		self.color = Color(self, color=color)
+
+# Node object
+class Node(Element):
+	# i is the intiger label for this node
+	# g is the graph this node is part of
+	def __init__(self, label, G):
 		self.label = label
-		self.graph = graph
-		self.color = color
-		self.children = {}
-		self.parents = {}
+		self.G = G
 
-	def addEdge(self, child, weight=1, iterate=True):
-		self.graph.add_edge(self.label, child.label, weight=weight)
-		self.children[child] = weight
-		child.parents[self] = weight
-		if not self.graph.directed and iterate:
-			child.addEdge(self, weight, False)
+		# These should be the same in an undirected graph
+		self.edgesFrom = []
+		self.edgesTo = []
 
+		self.neighbors = []
 
-	def color(self, color):
-		self.color = color
-		self.graph.get_node(self.label).attr['color'] = color'''
+		# Empty in an undirected graph
+		self.backNeighbors = []
+
+		super(Node, self).__init__()
+
+	# return the pvg version of this node
+	def pvgElement(self):
+		return self.G.G.get_node(self.label)
+
+	def __cmp__(self, other):
+		if isinstance(other, (int, long)):
+			return self.label - other
+		else:
+			return self.label - other.label
+
+# Edge object
+class Edge(Element):
+	# head and tail are the end nodes of the edge, either numbers of Node objects
+	# head points to tail along this edge in a directed graph: (head) ----> (tail)
+	# head and tail are arbitrary in an undirected graph: (head) ----- (tail)
+	# G is the graph this edge is a part of
+	def __init__(self, head, tail, G, weight=1):
+		self.G = G
+		if isinstance(head, (int, long)):
+			self.head = self.G.getNode(head)
+		else:
+			self.head = head
+		if isinstance(tail, (int, long)):
+			self.tail = self.G.getNode(tail)
+		else:
+			self.tail = tail
+
+		self.head.edgesFrom.append(self)
+		self.head.neighbors.append(self.tail)
+		self.tail.edgesTo.append(self)
+		if self.G.directed:
+			self.head.edgesTo.append(self)
+			self.tail.backNeighbors.append(self.head)
+		else:
+			self.tail.edgesFrom.append(self)
+			self.tail.neighbors.append(self.head)
+
+		self.weight = Weight(self, weight=weight)
+		super(Edge, self).__init__(color='black')
+
+	# return the pvg version of this edge
+	def pvgElement(self):
+		return self.G.G.get_edge(self.head.label, self.tail.label)
+
+	# takes one end and returns the other
+	# if a non-adjacent node is given, returns None
+	def follow(self, i):
+		if i == self.head:
+			return self.tail
+		if i == self.tail:
+			return self.head
+		return None
